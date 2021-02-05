@@ -7,34 +7,34 @@
 #define G 6.67408e-11
 
 #define TPB 1024 // TPB = Threads Per Block.
-#define TotalPoint TPB*512
+#define TotalPoint 1024*128
 #define BlackHoles 0
-#define rool 1
+#define rool 40
 
-#define dt 36.0f
+#define dt 10 * 365 * 24 * 3600.0f
 #define half_dt dt/2
-#define BodiesPerSave TotalPoint*rool
+#define BodiesPerSave TotalPoint*(TotalPoint/ 1000000000.0)*rool
 
-#define Rx_u 3 * 1e11
-#define Ry_u 3 * 1e11
-#define Rz_u 3 * 1e11
-#define Rx_l -3 * 1e11
-#define Ry_l -3 * 1e11
-#define Rz_l -3 * 1e11
+#define Rx_u 300 * LY
+#define Ry_u 300 * LY
+#define Rz_u 300 * LY
+#define Rx_l -300 * LY
+#define Ry_l -300 * LY
+#define Rz_l -300 * LY
 
-#define Rvx_u 1e7
-#define Rvy_u 1e7
-#define Rvz_u 1e7
-#define Rvx_l -1e7
-#define Rvy_l -1e7
-#define Rvz_l -1e7
+#define Rvx_u 1e6
+#define Rvy_u 1e6
+#define Rvz_u 1e6
+#define Rvx_l -1e6
+#define Rvy_l -1e6
+#define Rvz_l -1e6
 
-#define Rm_u 2e31
-#define Rm_l 1e15
+#define Rm_u 1e30
+#define Rm_l 1e5
 
 #define fix 1e3
 
-#define flopf (19*TotalPoint + 15)*1e-9
+#define flopf (28*TotalPoint + 15)*1e-9
 #define flopS flopf*rool*TotalPoint
 
 void GenerateRandomPoints(float *Point_x, float *Point_y, float *Point_z, float *Point_Gmdt,
@@ -42,19 +42,19 @@ void GenerateRandomPoints(float *Point_x, float *Point_y, float *Point_z, float 
   srand(time(NULL));
   //Generate random location for points.
   for (int Tv=0; Tv < TotalPoint; Tv++) {
-    Point_x[Tv] = (rand()/(float)RAND_MAX) * (Rx_u-Rx_l) + Rx_l;
-    Point_y[Tv] = (rand()/(float)RAND_MAX) * (Ry_u-Ry_l) + Ry_l;
-    Point_z[Tv] = (rand()/(float)RAND_MAX) * (Rz_u-Rz_l) + Rz_l;
+    Point_x[Tv] = rand()/(float)RAND_MAX * (Rx_u - Rx_l) + Rx_l;
+    Point_y[Tv] = rand()/(float)RAND_MAX * (Ry_u - Ry_l) + Ry_l;
+    Point_z[Tv] = rand()/(float)RAND_MAX * (Rz_u - Rz_l) + Rz_l;
     
-    Point_Gmdt[Tv] = ((rand()/(float)RAND_MAX) * Rm_u + Rm_l) * G * dt;
+    Point_Gmdt[Tv] = rand()/(float)RAND_MAX * (Rm_u + Rm_l) * G * dt;
     
-    Point_vx[Tv] = ((rand()/(float)RAND_MAX) * (Rvx_u-Rvx_l) + Rvx_l);
-    Point_vy[Tv] = ((rand()/(float)RAND_MAX) * (Rvy_u-Rvy_l) + Rvy_l);
-    Point_vz[Tv] = ((rand()/(float)RAND_MAX) * (Rvz_u-Rvz_l) + Rvz_l);
+    Point_vx[Tv] = rand()/(float)RAND_MAX * (Rvx_u - Rvx_l) + Rvx_l;
+    Point_vy[Tv] = rand()/(float)RAND_MAX * (Rvy_u - Rvy_l) + Rvy_l;
+    Point_vz[Tv] = rand()/(float)RAND_MAX * (Rvz_u - Rvz_l) + Rvz_l;
   }
   
   for (int Tv=0; Tv < BlackHoles; Tv++) {
-    Point_Gmdt[Tv] = G * 1e10 * dt * Point_Gmdt[Tv];
+    Point_Gmdt[Tv] = 1e5 * Point_Gmdt[Tv];
     /*
     Point_Gmdt[Tv] = G * Rm_u * 5e9 * dt;
     Point_vx[Tv] = 0;
@@ -103,8 +103,8 @@ __global__ void CaculateTheNextTick(float *Point_x, float *Point_y, float *Point
                                     float *Point_vx, float *Point_vy, float *Point_vz,
                                     float *T_x, float *T_y, float *T_z) {
          
-  int i =  blockIdx.x * blockDim.x + threadIdx.x; // Parallel index
-  
+  int i =  blockIdx.x * blockDim.x + threadIdx.x; // Get thread's index
+
   if (i < TotalPoint) {
     float da_i = 0.0f;
     float rR = 0.0f;
@@ -125,12 +125,12 @@ __global__ void CaculateTheNextTick(float *Point_x, float *Point_y, float *Point
       dx = Point_x[j] - x_i;//1 flops
       dy = Point_y[j] - y_i;//1 flops
       dz = Point_z[j] - z_i;//1 flops
-      rR = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix); //6+1 flops
+      rR = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix); //6+10 flops
       da_i = Point_Gmdt[j] * rR * rR * rR;//3 flops
       da_ix += dx * da_i;//2 flops
       da_iy += dy * da_i;//2 flops
       da_iz += dz * da_i;//2 flops
-    }//total 19 flops
+    }//total 28 * TotalPoint flops
     T_x[i] = x_i + Point_vx[i] * dt + half_dt * da_ix;//4 flops
     T_y[i] = y_i + Point_vy[i] * dt + half_dt * da_iy;//4 flops
     T_z[i] = z_i + Point_vz[i] * dt + half_dt * da_iz;//4 flops
@@ -141,7 +141,7 @@ __global__ void CaculateTheNextTick(float *Point_x, float *Point_y, float *Point
 }
 
 int main() {
-  int size = TotalPoint * sizeof(float);
+  int size = TotalPoint * sizeof(float *);
 
   //Define what we need on CPU.
   float *Point_x;
@@ -218,30 +218,36 @@ int main() {
     //Caculate the location of next tick.
     starttime = clock();
     for (int k=0; k < rool; k++) {
-      CaculateTheNextTick<<<(TotalPoint+TPB-1)/TPB, TPB>>>(GPU_Point_x, GPU_Point_y, GPU_Point_z, GPU_Point_Gmdt,
-                                                           GPU_Point_vx, GPU_Point_vy, GPU_Point_vz,
-                                                           GPU_T_x, GPU_T_y, GPU_T_z);
+      if (k%2) {
+        CaculateTheNextTick<<<(TotalPoint+TPB-1)/TPB, TPB>>>(GPU_T_x, GPU_T_y, GPU_T_z, GPU_Point_Gmdt,
+                                                             GPU_Point_vx, GPU_Point_vy, GPU_Point_vz,
+                                                             GPU_Point_x, GPU_Point_y, GPU_Point_z);
+      } else {
+        CaculateTheNextTick<<<(TotalPoint+TPB-1)/TPB, TPB>>>(GPU_Point_x, GPU_Point_y, GPU_Point_z, GPU_Point_Gmdt,
+                                                             GPU_Point_vx, GPU_Point_vy, GPU_Point_vz,
+                                                             GPU_T_x, GPU_T_y, GPU_T_z);
+      }
       //cudaDeviceSynchronize();
       cudaThreadSynchronize();
       //Update the locations of particles.
-      cudaMemcpy(GPU_Point_x, GPU_T_x, size, cudaMemcpyDeviceToDevice);
-      cudaMemcpy(GPU_Point_y, GPU_T_y, size, cudaMemcpyDeviceToDevice);
-      cudaMemcpy(GPU_Point_z, GPU_T_z, size, cudaMemcpyDeviceToDevice);
+      //cudaMemcpy(GPU_Point_x, GPU_T_x, size, cudaMemcpyDeviceToDevice);
+      //cudaMemcpy(GPU_Point_y, GPU_T_y, size, cudaMemcpyDeviceToDevice);
+      //cudaMemcpy(GPU_Point_z, GPU_T_z, size, cudaMemcpyDeviceToDevice);
     }
     endtime = clock();
     cudaMemcpy(Point_x, GPU_T_x, size, cudaMemcpyDeviceToHost);
     cudaMemcpy(Point_y, GPU_T_y, size, cudaMemcpyDeviceToHost);
     cudaMemcpy(Point_z, GPU_T_z, size, cudaMemcpyDeviceToHost);
-    printf("Drawing. ");
+    printf("Done. %.2lf fps, %.3lf Sps, %.2lf GBps, %.2lf GFLOPS",
+            rool / (endtime-starttime)*CLOCKS_PER_SEC,
+            1 / (endtime-starttime)*CLOCKS_PER_SEC,
+            BodiesPerSave / (endtime-starttime)*CLOCKS_PER_SEC,
+            flopS / (endtime-starttime)*CLOCKS_PER_SEC);
+    printf(" Drawing. \n");
     Draw(Point_x, Point_y, Point_z, save);
-    printf("Done. %.2f fps, %.3f Sps, %.2f bps, %.2f GFLOPS\n",
-	   rool / (endtime-starttime)*CLOCKS_PER_SEC,
-	   1 / (endtime-starttime)*CLOCKS_PER_SEC,
-	   BodiesPerSave / (endtime-starttime)*CLOCKS_PER_SEC,
-	   flopS / (endtime-starttime)*CLOCKS_PER_SEC);
     
   }
-  //General end of C programs.
   fclose(save);
+  //General end of C programs.
   return 0;
 }

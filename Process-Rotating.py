@@ -7,17 +7,37 @@ high = 1080
 
 LY = 9460730472580800
 
-zoom = 2*LY
+zoom = 300 * LY
 naX = 1.920
 naY = 1.080
-Zedge = 1920*zoom
+Zedge = 1.920*zoom
 XTo = (naX*2)*zoom#3.2e-5#
 YTo = (naY*2)*zoom#1.8e-5#
 
-BlackHoles = 8
+BlackHoles = 0
 
 Num = 0
 jump = 1
+
+def Matconv(A, B):
+    res = [0, 0, 0]
+    for a in range(3):
+        for b in range(3):
+            res[a] += B[a][b] * A[b]
+    return res
+        
+def Rotating(Location, x, y, z):
+    Rx = [[1, 0, 0],
+          [0, cos(y), -sin(y)],
+          [0, sin(y), cos(y)]]
+    Ry = [[cos(x), 0, sin(x)],
+          [0, 1, 0],
+          [-sin(x), 0, cos(x)]]
+    Rz = [[cos(z), -sin(z), 0],
+          [sin(z), cos(z), 0],
+          [0, 0, 1]]
+    return Matconv(Matconv(Matconv(Location, Rx), Ry), Rz)
+    
 def Draw(Num, Locations):
     temp = img.new("RGB", (wide, high), (0, 0, 0))
     for Point in Locations.keys():
@@ -30,7 +50,13 @@ def Draw(Num, Locations):
     temp.save("Pics/{}.png".format(Num))
     
 def Rendering(Num, PointGird):
+    rotatingDegree = Num / 1000
     [Xs, Ys, Zs] = PointGird
+    for i in range(len(Xs)):
+        xyz = [Xs[i], Ys[i], Zs[i]]
+        xyz = Rotating(xyz, rotatingDegree, rotatingDegree/2, 0)
+        [Xs[i], Ys[i], Zs[i]] = xyz
+        
     Locations = dict({})
     for i in range(len(Xs)):
         if abs(Zs[i]) > Zedge:
@@ -60,14 +86,15 @@ def Rendering(Num, PointGird):
                     Locations["[{}, {}]".format(display_X, display_Y)][2] = 255
             except:
                 Locations["[{}, {}]".format(display_X, display_Y)] = [128, 16, 16]
-    Draw(Num, Locations)
+    return Locations
 
 for Pg in open("data.data"):
     Num += 1
     if Num % jump == 0:
         Gird = eval(Pg) 
         print("{} : Drawing.".format(Num/jump), end="")
-        Rendering(int(Num/jump), Gird)
+        Locations = Rendering(int(Num/jump), Gird)
+        Draw(int(Num/jump), Locations)
         print("\t...Done!")
     else:
         continue
