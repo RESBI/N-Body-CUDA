@@ -7,7 +7,7 @@
 #define G 6.67408e-11
 
 #define TPB 1024 // TPB = Threads Per Block.
-#define TotalPoint 1024*128
+#define TotalPoint TPB*256
 #define BlackHoles 0
 #define rool 40
 
@@ -67,7 +67,12 @@ void GenerateRandomPoints(float *Point_x, float *Point_y, float *Point_z, float 
   }
 }
 
-void Draw(float *Point_x, float *Point_y, float *Point_z, FILE *save) {
+void Draw(float *Point_x, float *Point_y, float *Point_z) {
+  FILE *save;
+  if ((save=fopen("data.data", "a+")) == NULL) {
+    printf("Can't save data.\n");
+  }
+  
   //Data = [[x1, x2, ...], [y1, y2, ...], [z1, z2, ...]]
   fprintf(save, "[");
   //Print P_xs;
@@ -97,6 +102,8 @@ void Draw(float *Point_x, float *Point_y, float *Point_z, FILE *save) {
   }
   fprintf(save, "]");
   fprintf(save, "]\n"); // The end.
+  
+  fclose(save);
 }
 
 __global__ void CaculateTheNextTick(float *Point_x, float *Point_y, float *Point_z, float *Point_Gmdt,
@@ -195,6 +202,7 @@ int main() {
   if ((save=fopen("data.data", "w")) == NULL) {
     printf("Can't save data.\n");
   }
+  fclose(save);
   //Generate random point.
   GenerateRandomPoints(Point_x, Point_y, Point_z, Point_Gmdt,
                        Point_vx, Point_vy, Point_vz);
@@ -244,10 +252,10 @@ int main() {
             BodiesPerSave / (endtime-starttime)*CLOCKS_PER_SEC,
             flopS / (endtime-starttime)*CLOCKS_PER_SEC);
     printf(" Drawing. \n");
-    Draw(Point_x, Point_y, Point_z, save);
+    Draw(Point_x, Point_y, Point_z);
     
   }
-  fclose(save);
+  //fclose(save);
   //General end of C programs.
   return 0;
 }
