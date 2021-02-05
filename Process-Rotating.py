@@ -7,7 +7,7 @@ high = 1080
 
 LY = 9460730472580800
 
-zoom = 300 * LY
+zoom = 400 * LY
 naX = 1.920
 naY = 1.080
 Zedge = 1.920*zoom
@@ -85,7 +85,7 @@ def Rendering(Num, PointGird):
                     Locations["[{}, {}]".format(display_X, display_Y)][1] = 255
                     Locations["[{}, {}]".format(display_X, display_Y)][2] = 255
             except:
-                Locations["[{}, {}]".format(display_X, display_Y)] = [128, 16, 16]
+                Locations["[{}, {}]".format(display_X, display_Y)] = [128, 64, 64]
     return Locations
 
 for Pg in open("data.data"):
