@@ -6,9 +6,14 @@
 #define LY 9460730472580800 // Light-year
 #define G 6.67408e-11
 
-#define TPB 1024 // TPB = Threads Per Block.
-#define TotalPoint TPB*256
-#define BlackHoles 0
+#define BLOCK_Z 1
+#define BLOCK_Y 1
+#define BLOCK_X 1024 
+#define GRID_Z 1
+#define GRID_Y 1
+#define GRID_X 64 
+#define TotalPoint BLOCK_X * BLOCK_Y * BLOCK_Z * GRID_X * GRID_Y * GRID_Z
+#define BlackHoles 50
 #define rool 40
 
 #define dt 10 * 365 * 24 * 3600.0f
@@ -34,40 +39,31 @@
 
 #define fix 1e3
 
-#define flopf (28*TotalPoint + 15)*1e-9
+#define flopf (19*TotalPoint + 15)*1e-9
 #define flopS flopf*rool*TotalPoint
 
-void GenerateRandomPoints(float *Point_x, float *Point_y, float *Point_z, float *Point_Gmdt,
-                          float *Point_vx, float *Point_vy, float *Point_vz) {
+void GenerateRandomPoints(float4 *Point, float4 *Point_v) {
   srand(time(NULL));
   //Generate random location for points.
   for (int Tv=0; Tv < TotalPoint; Tv++) {
-    Point_x[Tv] = rand()/(float)RAND_MAX * (Rx_u - Rx_l) + Rx_l;
-    Point_y[Tv] = rand()/(float)RAND_MAX * (Ry_u - Ry_l) + Ry_l;
-    Point_z[Tv] = rand()/(float)RAND_MAX * (Rz_u - Rz_l) + Rz_l;
+    Point[Tv].x = rand()/(float)RAND_MAX * (Rx_u - Rx_l) + Rx_l;
+    Point[Tv].y = rand()/(float)RAND_MAX * (Ry_u - Ry_l) + Ry_l;
+    Point[Tv].z = rand()/(float)RAND_MAX * (Rz_u - Rz_l) + Rz_l;
     
-    Point_Gmdt[Tv] = rand()/(float)RAND_MAX * (Rm_u + Rm_l) * G * dt;
+    //Point_Gmdt = Point.w
+    Point[Tv].w = rand()/(float)RAND_MAX * (Rm_u + Rm_l) * G * dt;
     
-    Point_vx[Tv] = rand()/(float)RAND_MAX * (Rvx_u - Rvx_l) + Rvx_l;
-    Point_vy[Tv] = rand()/(float)RAND_MAX * (Rvy_u - Rvy_l) + Rvy_l;
-    Point_vz[Tv] = rand()/(float)RAND_MAX * (Rvz_u - Rvz_l) + Rvz_l;
+    Point_v[Tv].x = rand()/(float)RAND_MAX * (Rvx_u - Rvx_l) + Rvx_l;
+    Point_v[Tv].y = rand()/(float)RAND_MAX * (Rvy_u - Rvy_l) + Rvy_l;
+    Point_v[Tv].z = rand()/(float)RAND_MAX * (Rvz_u - Rvz_l) + Rvz_l;
   }
   
   for (int Tv=0; Tv < BlackHoles; Tv++) {
-    Point_Gmdt[Tv] = 1e5 * Point_Gmdt[Tv];
-    /*
-    Point_Gmdt[Tv] = G * Rm_u * 5e9 * dt;
-    Point_vx[Tv] = 0;
-    Point_vy[Tv] = 0;
-    Point_vz[Tv] = 0;
-    Point_x[Tv] = 0;
-    Point_y[Tv] = 0;
-    Point_z[Tv] = 0;
-    */
+    Point[Tv].w = 1e10 * Rm_u * G * dt;
   }
 }
 
-void Draw(float *Point_x, float *Point_y, float *Point_z) {
+void Save(float4 *Point) {
   FILE *save;
   if ((save=fopen("data.data", "a+")) == NULL) {
     printf("Can't save data.\n");
@@ -78,7 +74,7 @@ void Draw(float *Point_x, float *Point_y, float *Point_z) {
   //Print P_xs;
   fprintf(save, "[");
   for (int i=0; i < TotalPoint; i++) {
-    fprintf(save, "%.2f", Point_x[i]);
+    fprintf(save, "%.2f", Point[i].x);
     if (i != TotalPoint-1)
       fprintf(save, ", ");
   }
@@ -87,7 +83,7 @@ void Draw(float *Point_x, float *Point_y, float *Point_z) {
   //Print P_ys;
   fprintf(save, ", [");
   for (int i=0; i < TotalPoint; i++) {
-    fprintf(save, "%.2f", Point_y[i]);
+    fprintf(save, "%.2f", Point[i].y);
     if (i != TotalPoint-1)
       fprintf(save, ", ");
   }
@@ -96,7 +92,7 @@ void Draw(float *Point_x, float *Point_y, float *Point_z) {
   //Print P_zs;
   fprintf(save, ", [");
   for (int i=0; i < TotalPoint; i++) {
-    fprintf(save, "%.2f", Point_z[i]);
+    fprintf(save, "%.2f", Point[i].z);
     if (i != TotalPoint-1)
       fprintf(save, ", ");
   }
@@ -106,19 +102,17 @@ void Draw(float *Point_x, float *Point_y, float *Point_z) {
   fclose(save);
 }
 
-__global__ void CaculateTheNextTick(float *Point_x, float *Point_y, float *Point_z, float *Point_Gmdt,
-                                    float *Point_vx, float *Point_vy, float *Point_vz,
-                                    float *T_x, float *T_y, float *T_z) {
+__global__ void CaculateTheNextTick(float4 *Point, float4 *Point_v, float4 *T) {
          
   int i =  blockIdx.x * blockDim.x + threadIdx.x; // Get thread's index
 
-  if (i < TotalPoint) {
+  //if (i < TotalPoint) {
     float da_i = 0.0f;
-    float rR = 0.0f;
-    
-    float x_i = Point_x[i];
-    float y_i = Point_y[i];
-    float z_i = Point_z[i];
+    float rd = 0.0f; 
+
+    float x_i = Point[i].x;
+    float y_i = Point[i].y;
+    float z_i = Point[i].z;
     
     float dx = 0.0f;
     float dy = 0.0f;
@@ -129,111 +123,74 @@ __global__ void CaculateTheNextTick(float *Point_x, float *Point_y, float *Point
     float da_iz = 0.0f;
     
     for (int j=0; j<TotalPoint; j++) {
-      dx = Point_x[j] - x_i;//1 flops
-      dy = Point_y[j] - y_i;//1 flops
-      dz = Point_z[j] - z_i;//1 flops
-      rR = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix); //6+10 flops
-      da_i = Point_Gmdt[j] * rR * rR * rR;//3 flops
-      da_ix += dx * da_i;//2 flops
-      da_iy += dy * da_i;//2 flops
-      da_iz += dz * da_i;//2 flops
-    }//total 28 * TotalPoint flops
-    T_x[i] = x_i + Point_vx[i] * dt + half_dt * da_ix;//4 flops
-    T_y[i] = y_i + Point_vy[i] * dt + half_dt * da_iy;//4 flops
-    T_z[i] = z_i + Point_vz[i] * dt + half_dt * da_iz;//4 flops
-    Point_vx[i] = Point_vx[i] + da_ix;//1 flops
-    Point_vy[i] = Point_vy[i] + da_iy;//1 flops
-    Point_vz[i] = Point_vz[i] + da_iz;//1 flops
-  }//total 15 flops
+      dx = Point[j].x - x_i;//1 flo
+      dy = Point[j].y - y_i;//1 flo
+      dz = Point[j].z - z_i;//1 flo
+      rd = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix);//7 flo
+      da_i = Point[j].w * rd * rd * rd;//3 flo
+      da_ix += dx * da_i;//2 flo
+      da_iy += dy * da_i;//2 flo
+      da_iz += dz * da_i;//2 flo
+    }//total 19 * TotalPoint flo
+    T[i].x = x_i + Point_v[i].x * dt + half_dt * da_ix;//4 flo
+    T[i].y = y_i + Point_v[i].y * dt + half_dt * da_iy;//4 flo
+    T[i].z = z_i + Point_v[i].z * dt + half_dt * da_iz;//4 flo
+    Point_v[i].x = Point_v[i].x + da_ix;//1 flo
+    Point_v[i].y = Point_v[i].y + da_iy;//1 flo
+    Point_v[i].z = Point_v[i].z + da_iz;//1 flo
+  //}//total 15 + 19*TotalPoint flo
 }
 
 int main() {
-  int size = TotalPoint * sizeof(float *);
-
   //Define what we need on CPU.
-  float *Point_x;
-  float *Point_y;
-  float *Point_z;
+  float4 *Point;
   
-  float *Point_vx;
-  float *Point_vy;
-  float *Point_vz;
+  float4 *Point_v;
   
-  float *Point_Gmdt;
-  
-  Point_x = (float *)malloc(size);
-  Point_y = (float *)malloc(size);
-  Point_z = (float *)malloc(size);
-  Point_vx = (float *)malloc(size);
-  Point_vy = (float *)malloc(size);
-  Point_vz = (float *)malloc(size);
-  Point_Gmdt = (float *)malloc(size);
+  Point = (float4 *)malloc(TotalPoint * sizeof(float4));
+  Point_v = (float4 *)malloc(TotalPoint * sizeof(float4));
   
   //Define what we need on GPU.
-  float *GPU_Point_x;
-  float *GPU_Point_y;
-  float *GPU_Point_z;
+  float4 *GPU_Point;
   
-  float *GPU_Point_vx;
-  float *GPU_Point_vy;
-  float *GPU_Point_vz;
+  float4 *GPU_Point_v;
 
-  float *GPU_T_x;
-  float *GPU_T_y;
-  float *GPU_T_z;
+  float4 *GPU_T;
   
-  float *GPU_Point_Gmdt;
-  
-  cudaMalloc((void**)&GPU_Point_x, size);
-  cudaMalloc((void**)&GPU_Point_y, size);
-  cudaMalloc((void**)&GPU_Point_z, size);
-  cudaMalloc((void**)&GPU_Point_vx, size);
-  cudaMalloc((void**)&GPU_Point_vy, size);
-  cudaMalloc((void**)&GPU_Point_vz, size);
-  cudaMalloc((void**)&GPU_T_x, size);
-  cudaMalloc((void**)&GPU_T_y, size);
-  cudaMalloc((void**)&GPU_T_z, size);
-  cudaMalloc((void**)&GPU_Point_Gmdt, size);
+  cudaMalloc((void**)&GPU_Point, TotalPoint * sizeof(float4));
+  cudaMalloc((void**)&GPU_Point_v, TotalPoint * sizeof(float4));
+  cudaMalloc((void**)&GPU_T, TotalPoint * sizeof(float4));
   
   int count = 0;
   float starttime, endtime;
   
+  dim3 grid(GRID_X, GRID_Y, GRID_Z); 
+  dim3 block(BLOCK_X, BLOCK_Y, BLOCK_Z);
+
   FILE *save;
   if ((save=fopen("data.data", "w")) == NULL) {
     printf("Can't save data.\n");
   }
   fclose(save);
   //Generate random point.
-  GenerateRandomPoints(Point_x, Point_y, Point_z, Point_Gmdt,
-                       Point_vx, Point_vy, Point_vz);
-  cudaMemcpy(GPU_Point_Gmdt, Point_Gmdt, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(GPU_Point_vx, Point_vx, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(GPU_Point_vy, Point_vy, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(GPU_Point_vz, Point_vz, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(GPU_Point_x, Point_x, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(GPU_Point_y, Point_y, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(GPU_Point_z, Point_z, size, cudaMemcpyHostToDevice);
-  free(Point_Gmdt); // FREEDOM!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  free(Point_vx);
-  free(Point_vy);
-  free(Point_vz);
+  GenerateRandomPoints(Point, Point_v);
+  cudaMemcpy(GPU_Point, Point, TotalPoint * sizeof(float4), cudaMemcpyHostToDevice);
+  cudaMemcpy(GPU_Point_v, Point_v, TotalPoint * sizeof(float4), cudaMemcpyHostToDevice);
+  free(Point_v);
 
   printf("Start calc. N=%d, dt=%f, frame per save=%d\n", TotalPoint, dt, rool);
   while (1==1) {
     count++;
     
-    printf("[Save %d]: Calculating. ", count);
+    printf("[Save %d]: Computing... ", count);
     //Caculate the location of next tick.
     starttime = clock();
+    
     for (int k=0; k < rool; k++) {
       if (k%2) {
-        CaculateTheNextTick<<<(TotalPoint+TPB-1)/TPB, TPB>>>(GPU_T_x, GPU_T_y, GPU_T_z, GPU_Point_Gmdt,
-                                                             GPU_Point_vx, GPU_Point_vy, GPU_Point_vz,
-                                                             GPU_Point_x, GPU_Point_y, GPU_Point_z);
+        CaculateTheNextTick<<<grid, block>>>(GPU_T, GPU_Point_v, GPU_Point);
       } else {
-        CaculateTheNextTick<<<(TotalPoint+TPB-1)/TPB, TPB>>>(GPU_Point_x, GPU_Point_y, GPU_Point_z, GPU_Point_Gmdt,
-                                                             GPU_Point_vx, GPU_Point_vy, GPU_Point_vz,
-                                                             GPU_T_x, GPU_T_y, GPU_T_z);
+        CaculateTheNextTick<<<grid, block>>>(GPU_Point, GPU_Point_v, GPU_T);
       }
       //cudaDeviceSynchronize();
       cudaThreadSynchronize();
@@ -241,19 +198,18 @@ int main() {
       //cudaMemcpy(GPU_Point_x, GPU_T_x, size, cudaMemcpyDeviceToDevice);
       //cudaMemcpy(GPU_Point_y, GPU_T_y, size, cudaMemcpyDeviceToDevice);
       //cudaMemcpy(GPU_Point_z, GPU_T_z, size, cudaMemcpyDeviceToDevice);
-    }
+    } 
+    
     endtime = clock();
-    cudaMemcpy(Point_x, GPU_T_x, size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(Point_y, GPU_T_y, size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(Point_z, GPU_T_z, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(Point, GPU_T, TotalPoint * sizeof(float4), cudaMemcpyDeviceToHost);
     printf("Done. %.2lf fps, %.3lf Sps, %.2lf GBps, %.2lf GFLOPS",
             rool / (endtime-starttime)*CLOCKS_PER_SEC,
             1 / (endtime-starttime)*CLOCKS_PER_SEC,
             BodiesPerSave / (endtime-starttime)*CLOCKS_PER_SEC,
             flopS / (endtime-starttime)*CLOCKS_PER_SEC);
-    printf(" Drawing. \n");
-    Draw(Point_x, Point_y, Point_z);
-    
+    printf(" Saving... ");
+    Save(Point);
+    printf("Done. \n");
   }
   //fclose(save);
   //General end of C programs.
