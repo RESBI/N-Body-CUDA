@@ -11,9 +11,9 @@
 #define BLOCK_X 1024 
 #define GRID_Z 1
 #define GRID_Y 1
-#define GRID_X 64 
+#define GRID_X 1024
 #define TotalPoint BLOCK_X * BLOCK_Y * BLOCK_Z * GRID_X * GRID_Y * GRID_Z
-#define BlackHoles 50
+#define BlackHoles 100
 #define rool 40
 
 #define dt 10 * 365 * 24 * 3600.0f
@@ -35,7 +35,7 @@
 #define Rvz_l -1e6
 
 #define Rm_u 1e30
-#define Rm_l 1e5
+#define Rm_l 1e10
 
 #define fix 1e3
 
@@ -122,19 +122,30 @@ __global__ void CaculateTheNextTick(float4 *Point, float4 *Point_v, float4 *T) {
     float da_iy = 0.0f;
     float da_iz = 0.0f;
     
-    for (int j=0; j<TotalPoint; j++) {
-      dx = Point[j].x - x_i;//1 flo
-      dy = Point[j].y - y_i;//1 flo
-      dz = Point[j].z - z_i;//1 flo
-      rd = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix);//7 flo
-      da_i = Point[j].w * rd * rd * rd;//3 flo
-      da_ix += dx * da_i;//2 flo
-      da_iy += dy * da_i;//2 flo
-      da_iz += dz * da_i;//2 flo
-    }//total 19 * TotalPoint flo
+    __shared__ float4 Temp[BLOCK_X];
+#pragma unroll 
+    for (int tile=0; tile < gridDim.x; tile++) { 
+      Temp[threadIdx.x] = Point[tile * blockDim.x + threadIdx.x]; 
+      __syncthreads(); 
+      
+      for (int j=0; j<BLOCK_X; j++) {
+        dx = Temp[j].x - x_i;//1 flo
+        dy = Temp[j].y - y_i;//1 flo
+        dz = Temp[j].z - z_i;//1 flo
+      
+        rd = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix);//7 flo
+        da_i = Temp[j].w * rd * rd * rd;//3 flo
+        da_ix += dx * da_i;//2 flo
+        da_iy += dy * da_i;//2 flo
+        da_iz += dz * da_i;//2 flo
+      }//total 19 * TotalPoint flo 
+      __syncthreads(); 
+    }
+    
     T[i].x = x_i + Point_v[i].x * dt + half_dt * da_ix;//4 flo
     T[i].y = y_i + Point_v[i].y * dt + half_dt * da_iy;//4 flo
     T[i].z = z_i + Point_v[i].z * dt + half_dt * da_iz;//4 flo
+    
     Point_v[i].x = Point_v[i].x + da_ix;//1 flo
     Point_v[i].y = Point_v[i].y + da_iy;//1 flo
     Point_v[i].z = Point_v[i].z + da_iz;//1 flo
