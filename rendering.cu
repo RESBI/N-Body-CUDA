@@ -314,7 +314,7 @@ int main() {
   // image_index = image_index_base + image_index_offset
   // image_index_offset is the counter. 
   int image_index_offset = 0;
-  int image_index_base = 418; 
+  int image_index_base = 0; 
   int image_index = 0; 
 
   double begin_ms; 
