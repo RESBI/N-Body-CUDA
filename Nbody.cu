@@ -2,180 +2,278 @@
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
+//#include <unistd.h>
 
+#ifndef __linux__
+#include <windows.h>
+#endif
+
+#ifdef __linux__ 
+#include <sys/time.h>
+#define getMillisecond __getMillisecond
+#else
+#define getMillisecond GetTickCount
+#endif
+
+#define pi 3.141592653589793238462643383279502884197169399
+#define tau 2 * pi
 #define LY 9460730472580800 // Light-year
 #define G 6.67408e-11
 
 #define BLOCK_Z 1
 #define BLOCK_Y 1
-#define BLOCK_X 1024 
+#define BLOCK_X 64
 #define GRID_Z 1
 #define GRID_Y 1
-#define GRID_X 1024
+#define GRID_X 131072 / BLOCK_X
 #define TotalPoint BLOCK_X * BLOCK_Y * BLOCK_Z * GRID_X * GRID_Y * GRID_Z
-#define BlackHoles 100
-#define rool 40
+#define rool 50
 
 #define dt 10 * 365 * 24 * 3600.0f
 #define half_dt dt/2
-#define BodiesPerSave TotalPoint*(TotalPoint/ 1000000000.0)*rool
-
-#define Rx_u 300 * LY
-#define Ry_u 300 * LY
-#define Rz_u 300 * LY
-#define Rx_l -300 * LY
-#define Ry_l -300 * LY
-#define Rz_l -300 * LY
-
-#define Rvx_u 1e6
-#define Rvy_u 1e6
-#define Rvz_u 1e6
-#define Rvx_l -1e6
-#define Rvy_l -1e6
-#define Rvz_l -1e6
-
-#define Rm_u 1e30
-#define Rm_l 1e10
+#define BodiesPerSave (long long)TotalPoint*(TotalPoint/ 1000000000.0)*rool
 
 #define fix 1e3
 
-#define flopf (19*TotalPoint + 15)*1e-9
-#define flopS flopf*rool*TotalPoint
+#define PRECISION double
+#define PRECISION_4VECTOR double4
 
-void GenerateRandomPoints(float4 *Point, float4 *Point_v) {
+#define flopf (long double)(20*BLOCK_X + 15)*GRID_X*1e-9
+#define flopS (long double)flopf*rool*TotalPoint
+
+/*
+// Disk, uneven.
+void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) {
+  PRECISION SUP_v = 1e7;
+  PRECISION INF_v = 1e2;
+  PRECISION SUP_v_z = 1e2;
+  PRECISION INF_v_z = -1e2;
+  PRECISION SUP_z = 5 * LY;
+  PRECISION INF_z = -5 * LY;
+  PRECISION SUP_radiu = 100 * LY;
+  PRECISION INF_radiu = 1 * LY;
+  PRECISION SUP_mass = 1e30;
+  PRECISION INF_mass = 1e10;
+  PRECISION temp_theta, temp_radiu, temp_v;
+  srand(time(NULL));
+  // Generate.
+  // BlackHole, at the center of the disk.
+  Point[0].w = (float)(1e10 * SUP_mass * G * dt);
+  Point[0].x = 0;
+  Point[0].y = 0;
+  Point[0].z = 0;
+  Point_v[0].w = 0;
+  Point_v[0].x = 0;
+  Point_v[0].y = 0;
+  Point_v[0].z = 0;
+  // Generate stars.
+  for (unsigned long i = 1; i<TotalPoint; i++) {
+    temp_theta = tau * rand()/(PRECISION)RAND_MAX;
+    temp_radiu = (SUP_radiu - INF_radiu) * rand()/(PRECISION)RAND_MAX + INF_radiu;
+    temp_v = (SUP_v - INF_v) * rand()/(PRECISION)RAND_MAX + INF_v;
+    // Generate mass*G*dt constant.
+    Point[i].w = (PRECISION)(((SUP_mass - INF_mass) * rand()/(PRECISION)RAND_MAX + INF_mass) * G * dt);
+    // Generate location.
+    Point[i].x = temp_radiu * cos(temp_theta);
+    Point[i].y = temp_radiu * sin(temp_theta);
+    Point[i].z = (SUP_z - INF_z) * rand()/(PRECISION)RAND_MAX + INF_z;
+    // Generate velocity.
+    Point_v[i].x = temp_v * (0 - sin(temp_radiu));
+    Point_v[i].y = temp_v * cos(temp_radiu);
+    Point_v[i].z = 0;//(SUP_v_z - INF_v_z) * rand()/(PRECISION)RAND_MAX + INF_v_z;
+  }
+
+}
+*/
+
+
+// Cube, even.
+void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) {
+  PRECISION Rx_u = 300 * LY;
+  PRECISION Ry_u = 300 * LY;
+  PRECISION Rz_u = 300 * LY;
+  PRECISION Rx_l = -300 * LY;
+  PRECISION Ry_l = -300 * LY;
+  PRECISION Rz_l = -300 * LY;
+  PRECISION Rvx_u = 1e6;
+  PRECISION Rvy_u = 1e6;
+  PRECISION Rvz_u = 1e6;
+  PRECISION Rvx_l = -1e6;
+  PRECISION Rvy_l = -1e6;
+  PRECISION Rvz_l = -1e6;
+  PRECISION Rm_u = 1e30;
+  PRECISION Rm_l = 1e10;
+  unsigned long BlackHoles = 10;
   srand(time(NULL));
   //Generate random location for points.
-  for (int Tv=0; Tv < TotalPoint; Tv++) {
-    Point[Tv].x = rand()/(float)RAND_MAX * (Rx_u - Rx_l) + Rx_l;
-    Point[Tv].y = rand()/(float)RAND_MAX * (Ry_u - Ry_l) + Ry_l;
-    Point[Tv].z = rand()/(float)RAND_MAX * (Rz_u - Rz_l) + Rz_l;
-    
+  for (unsigned long Tv=0; Tv < TotalPoint; Tv++) {
+    Point[Tv].x = rand()/(PRECISION)RAND_MAX * (Rx_u - Rx_l) + Rx_l;
+    Point[Tv].y = rand()/(PRECISION)RAND_MAX * (Ry_u - Ry_l) + Ry_l;
+    Point[Tv].z = rand()/(PRECISION)RAND_MAX * (Rz_u - Rz_l) + Rz_l;
+
     //Point_Gmdt = Point.w
-    Point[Tv].w = rand()/(float)RAND_MAX * (Rm_u + Rm_l) * G * dt;
-    
-    Point_v[Tv].x = rand()/(float)RAND_MAX * (Rvx_u - Rvx_l) + Rvx_l;
-    Point_v[Tv].y = rand()/(float)RAND_MAX * (Rvy_u - Rvy_l) + Rvy_l;
-    Point_v[Tv].z = rand()/(float)RAND_MAX * (Rvz_u - Rvz_l) + Rvz_l;
+    Point[Tv].w = rand()/(PRECISION)RAND_MAX * (Rm_u + Rm_l) * G * dt;
+
+    Point_v[Tv].x = rand()/(PRECISION)RAND_MAX * (Rvx_u - Rvx_l) + Rvx_l;
+    Point_v[Tv].y = rand()/(PRECISION)RAND_MAX * (Rvy_u - Rvy_l) + Rvy_l;
+    Point_v[Tv].z = rand()/(PRECISION)RAND_MAX * (Rvz_u - Rvz_l) + Rvz_l;
   }
-  
-  for (int Tv=0; Tv < BlackHoles; Tv++) {
+
+  for (unsigned long Tv=0; Tv < BlackHoles; Tv++) {
     Point[Tv].w = 1e10 * Rm_u * G * dt;
   }
 }
 
-void Save(float4 *Point) {
+
+
+void Save(PRECISION_4VECTOR *Point, int count) {
+  char fileName[255];
+  unsigned long long t[1] = {TotalPoint};
+  PRECISION temp[4];
+  sprintf(fileName, "./datas/%ld,%d.nbody", TotalPoint, count);
+  FILE *save;
+  if ((save = fopen(fileName, "wb")) == NULL) {
+    printf("Can't save datas. %d", count);
+  }
+  // Save the number of bodies.
+  fwrite(t, 8, 1, save);
+  /*
+  for (unsigned long i=0; i < TotalPoint; i++) {
+    temp[0] = Point[i].w;
+    temp[1] = Point[i].x;
+    temp[2] = Point[i].y;
+    temp[3] = Point[i].z;
+    fwrite(temp, sizeof(PRECISION), 4, save);
+  }
+  */
+  fwrite(Point, sizeof(PRECISION), 4 * TotalPoint, save); 
+  fclose(save);
+}
+
+/*
+void Save(PRECISION_4VECTOR *Point, int count) {
   FILE *save;
   if ((save=fopen("data.data", "a+")) == NULL) {
     printf("Can't save data.\n");
   }
-  
+
   //Data = [[x1, x2, ...], [y1, y2, ...], [z1, z2, ...]]
   fprintf(save, "[");
   //Print P_xs;
   fprintf(save, "[");
-  for (int i=0; i < TotalPoint; i++) {
+  for (unsigned long i=0; i < TotalPoint; i++) {
     fprintf(save, "%.2f", Point[i].x);
     if (i != TotalPoint-1)
       fprintf(save, ", ");
   }
   fprintf(save, "]");
-  
+
   //Print P_ys;
   fprintf(save, ", [");
-  for (int i=0; i < TotalPoint; i++) {
+  for (unsigned long i=0; i < TotalPoint; i++) {
     fprintf(save, "%.2f", Point[i].y);
     if (i != TotalPoint-1)
       fprintf(save, ", ");
   }
   fprintf(save, "]");
-  
+
   //Print P_zs;
   fprintf(save, ", [");
-  for (int i=0; i < TotalPoint; i++) {
+  for (unsigned long i=0; i < TotalPoint; i++) {
     fprintf(save, "%.2f", Point[i].z);
     if (i != TotalPoint-1)
       fprintf(save, ", ");
   }
   fprintf(save, "]");
   fprintf(save, "]\n"); // The end.
-  
+
   fclose(save);
 }
+*/
 
-__global__ void CaculateTheNextTick(float4 *Point, float4 *Point_v, float4 *T) {
-         
-  int i =  blockIdx.x * blockDim.x + threadIdx.x; // Get thread's index
+__global__ void CaculateTheNextTick(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v, PRECISION_4VECTOR *T) {
+
+  unsigned long i =  blockIdx.x * blockDim.x + threadIdx.x; // Get thread's index
 
   //if (i < TotalPoint) {
-    float da_i = 0.0f;
-    float rd = 0.0f; 
+    PRECISION da_i = 0.0f;
+    PRECISION rd = 0.0f;
 
-    float x_i = Point[i].x;
-    float y_i = Point[i].y;
-    float z_i = Point[i].z;
-    
-    float dx = 0.0f;
-    float dy = 0.0f;
-    float dz = 0.0f;
-    
-    float da_ix = 0.0f;
-    float da_iy = 0.0f;
-    float da_iz = 0.0f;
-    
-    __shared__ float4 Temp[BLOCK_X];
-#pragma unroll 
-    for (int tile=0; tile < gridDim.x; tile++) { 
-      Temp[threadIdx.x] = Point[tile * blockDim.x + threadIdx.x]; 
-      __syncthreads(); 
-      
+    PRECISION x_i = Point[i].x;
+    PRECISION y_i = Point[i].y;
+    PRECISION z_i = Point[i].z;
+
+    PRECISION dx = 0.0f;
+    PRECISION dy = 0.0f;
+    PRECISION dz = 0.0f;
+
+    PRECISION da_ix = 0.0f;
+    PRECISION da_iy = 0.0f;
+    PRECISION da_iz = 0.0f;
+
+    __shared__ PRECISION_4VECTOR Temp[BLOCK_X];
+    for (int tile=0; tile < gridDim.x; tile++) {
+      __syncthreads();
+      Temp[threadIdx.x] = Point[tile * blockDim.x + threadIdx.x];
+      __syncthreads();
+
+      //#pragma unroll
       for (int j=0; j<BLOCK_X; j++) {
-        dx = Temp[j].x - x_i;//1 flo
-        dy = Temp[j].y - y_i;//1 flo
-        dz = Temp[j].z - z_i;//1 flo
-      
-        rd = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix);//7 flo
-        da_i = Temp[j].w * rd * rd * rd;//3 flo
-        da_ix += dx * da_i;//2 flo
-        da_iy += dy * da_i;//2 flo
-        da_iz += dz * da_i;//2 flo
-      }//total 19 * TotalPoint flo 
-      __syncthreads(); 
+        //if (i != j) {
+          dx = Temp[j].x - x_i;//1 flo
+          dy = Temp[j].y - y_i;//1 flo
+          dz = Temp[j].z - z_i;//1 flo
+          //dpos = Temp[j] - pos;
+
+          rd = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix); // 8 flo
+          //rd = rsqrtf(dot(dpos) + fix);
+
+          da_i = Temp[j].w * rd * rd * rd; //3 flo
+          //da_i = Temp[j].w
+
+          da_ix += dx * da_i;//2 flo
+          da_iy += dy * da_i;//2 flo
+          da_iz += dz * da_i;//2 flo
+        //}
+      }//total 20 * TotalPoint flo
     }
-    
+
     T[i].x = x_i + Point_v[i].x * dt + half_dt * da_ix;//4 flo
     T[i].y = y_i + Point_v[i].y * dt + half_dt * da_iy;//4 flo
     T[i].z = z_i + Point_v[i].z * dt + half_dt * da_iz;//4 flo
-    
+
     Point_v[i].x = Point_v[i].x + da_ix;//1 flo
     Point_v[i].y = Point_v[i].y + da_iy;//1 flo
     Point_v[i].z = Point_v[i].z + da_iz;//1 flo
-  //}//total 15 + 19*TotalPoint flo
+  //}//total 15 + 12*TotalPoint flo
 }
 
 int main() {
   //Define what we need on CPU.
-  float4 *Point;
-  
-  float4 *Point_v;
-  
-  Point = (float4 *)malloc(TotalPoint * sizeof(float4));
-  Point_v = (float4 *)malloc(TotalPoint * sizeof(float4));
-  
-  //Define what we need on GPU.
-  float4 *GPU_Point;
-  
-  float4 *GPU_Point_v;
+  cudaSetDevice(2);
 
-  float4 *GPU_T;
-  
-  cudaMalloc((void**)&GPU_Point, TotalPoint * sizeof(float4));
-  cudaMalloc((void**)&GPU_Point_v, TotalPoint * sizeof(float4));
-  cudaMalloc((void**)&GPU_T, TotalPoint * sizeof(float4));
-  
+  PRECISION_4VECTOR *Point;
+
+  PRECISION_4VECTOR *Point_v;
+
+  Point = (PRECISION_4VECTOR *)malloc(TotalPoint * sizeof(PRECISION_4VECTOR));
+  Point_v = (PRECISION_4VECTOR *)malloc(TotalPoint * sizeof(PRECISION_4VECTOR));
+
+  //Define what we need on GPU.
+  PRECISION_4VECTOR *GPU_Point;
+
+  PRECISION_4VECTOR *GPU_Point_v;
+
+  PRECISION_4VECTOR *GPU_T;
+
+  cudaMalloc((void**)&GPU_Point, TotalPoint * sizeof(PRECISION_4VECTOR));
+  cudaMalloc((void**)&GPU_Point_v, TotalPoint * sizeof(PRECISION_4VECTOR));
+  cudaMalloc((void**)&GPU_T, TotalPoint * sizeof(PRECISION_4VECTOR));
+
   int count = 0;
-  float starttime, endtime;
-  
-  dim3 grid(GRID_X, GRID_Y, GRID_Z); 
+  double starttime, endtime, deltatime;
+
+  dim3 grid(GRID_X, GRID_Y, GRID_Z);
   dim3 block(BLOCK_X, BLOCK_Y, BLOCK_Z);
 
   FILE *save;
@@ -185,44 +283,62 @@ int main() {
   fclose(save);
   //Generate random point.
   GenerateRandomPoints(Point, Point_v);
-  cudaMemcpy(GPU_Point, Point, TotalPoint * sizeof(float4), cudaMemcpyHostToDevice);
-  cudaMemcpy(GPU_Point_v, Point_v, TotalPoint * sizeof(float4), cudaMemcpyHostToDevice);
+  Save(Point, count); 
+  
+  cudaMemcpy(GPU_Point, Point, TotalPoint * sizeof(PRECISION_4VECTOR), cudaMemcpyHostToDevice);
+  cudaMemcpy(GPU_T, Point, TotalPoint * sizeof(PRECISION_4VECTOR), cudaMemcpyHostToDevice);
+  cudaMemcpy(GPU_Point_v, Point_v, TotalPoint * sizeof(PRECISION_4VECTOR), cudaMemcpyHostToDevice);
   free(Point_v);
 
-  printf("Start calc. N=%d, dt=%f, frame per save=%d\n", TotalPoint, dt, rool);
+  printf("Start to compute. N=%ld, dt=%f, frame per save=%d\n", TotalPoint, dt, rool);
   while (1==1) {
     count++;
-    
-    printf("[Save %d]: Computing... ", count);
+
+    printf("[Save %d]: Computing... \n", count);
+    //fflush(stdout);
     //Caculate the location of next tick.
-    starttime = clock();
-    
+    starttime = getMillisecond(); 
+
     for (int k=0; k < rool; k++) {
+      printf("\tCalculating %d... \r", (count - 1) * rool + k);
+      fflush(stdout);
       if (k%2) {
         CaculateTheNextTick<<<grid, block>>>(GPU_T, GPU_Point_v, GPU_Point);
       } else {
         CaculateTheNextTick<<<grid, block>>>(GPU_Point, GPU_Point_v, GPU_T);
       }
-      //cudaDeviceSynchronize();
+      cudaDeviceSynchronize();
       cudaThreadSynchronize();
-      //Update the locations of particles.
-      //cudaMemcpy(GPU_Point_x, GPU_T_x, size, cudaMemcpyDeviceToDevice);
-      //cudaMemcpy(GPU_Point_y, GPU_T_y, size, cudaMemcpyDeviceToDevice);
-      //cudaMemcpy(GPU_Point_z, GPU_T_z, size, cudaMemcpyDeviceToDevice);
-    } 
-    
-    endtime = clock();
-    cudaMemcpy(Point, GPU_T, TotalPoint * sizeof(float4), cudaMemcpyDeviceToHost);
-    printf("Done. %.2lf fps, %.3lf Sps, %.2lf GBps, %.2lf GFLOPS",
-            rool / (endtime-starttime)*CLOCKS_PER_SEC,
-            1 / (endtime-starttime)*CLOCKS_PER_SEC,
-            BodiesPerSave / (endtime-starttime)*CLOCKS_PER_SEC,
-            flopS / (endtime-starttime)*CLOCKS_PER_SEC);
+    }
+
+    endtime = getMillisecond();
+              //clock();
+    deltatime = ( endtime - starttime ) / 1000;
+    cudaMemcpy(Point, GPU_T, TotalPoint * sizeof(PRECISION_4VECTOR), cudaMemcpyDeviceToHost);
+    /*
+    printf("Done. %.2Lf fps, %.3Lf Sps, %.2Lf GPps, %.2Lf GFlops",
+            rool / (long double)deltatime,
+            1 / (long double)deltatime,
+            BodiesPerSave / (long double)deltatime,
+            flopS / (long double)deltatime);
+    */
+    printf("\n\tGPPS = %Lf, \tGFlops=%Lf\n",
+        BodiesPerSave / (long double)deltatime,
+        flopS / (long double)deltatime);
+    fflush(stdout); 
     printf(" Saving... ");
-    Save(Point);
+    Save(Point, count);
     printf("Done. \n");
   }
   //fclose(save);
+
+  //free(Point);
+  //free(Point_v);
+  //cudaFree(GPU_Point);
+  //cudaFree(GPU_Point_v);
+  //cudaFree(GPU_T);
+
   //General end of C programs.
+
   return 0;
 }
