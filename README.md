@@ -51,6 +51,8 @@ Run `make_rendering.cuda.sh` on Linux or `make_rendering.cuda.bat` on Windows, m
 
 ### Running 
 
+Before using it, please check the keyword "Particle Number" under the **next** section "Do your own configuration". 
+
 First create a folder `images` in the same directory of `rendering.cu`, then run `./rendering.cuda.out` on Linux or `./rendering.cuda.exe` on Windows.
 
 ### Do your own configuration 
