@@ -49,7 +49,7 @@
 
 #define PRECISION double
 #define PRECISION_4 double4
-#define STAR_RADIUS (PRECISION)2e15
+#define STAR_RADIUS (PRECISION)2e16
 
 #define TILE_SIZE 128
 
@@ -141,7 +141,7 @@ __global__ void render_CUDA(long image_size_width,
     // I have no need to do tiling here, 
     // since it has no bottleneck on memory accessing, 
     // so I'm not gonna change it, temporarly. 
-    // Tile size must match block dim
+    // Tile size must match block dim, at least for now. 
     __shared__ PRECISION_4 tile_point_position[TILE_SIZE]; 
     for (long tile_index = 0; tile_index < data_point_number / TILE_SIZE; tile_index++) { 
       __syncthreads(); 
@@ -156,14 +156,10 @@ __global__ void render_CUDA(long image_size_width,
         pixel_point_relative[1] = tile_point_position[point_index].y - pixel_position[1]; 
         pixel_point_relative[2] = tile_point_position[point_index].z - pixel_position[2]; 
 
-      
         pixel_point_distance_reverse = rsqrtf(pixel_point_relative[0] * pixel_point_relative[0] + 
                                               pixel_point_relative[1] * pixel_point_relative[1] +
                                               pixel_point_relative[2] * pixel_point_relative[2]);  
 
-        // A bit slower
-        //pixel_point_distance_reverse = rnorm3df(pixel_point_relative[0], pixel_point_relative[1], pixel_point_relative[2]); 
-      
         pixel_innerproduct = (pixel_point_relative[0] * pixel_normal[0] + 
                               pixel_point_relative[1] * pixel_normal[1] +
                               pixel_point_relative[2] * pixel_normal[2]); 
@@ -173,11 +169,11 @@ __global__ void render_CUDA(long image_size_width,
           pixel_point_angleradius = atanf(STAR_RADIUS * pixel_point_distance_reverse); 
           pixel_point_angle = acosf(pixel_innerproduct * pixel_point_distance_reverse); 
 
-          if (pixel_point_angle < 4 * pixel_point_angleradius) {
+          //if (pixel_point_angle < 4 * pixel_point_angleradius) {
             //pixel_accumulation += 1; 
             // This is what makes it sloooooow
             pixel_accumulation += 10 * __expf(- pixel_point_angle * pixel_point_angle / (pixel_point_angleradius * pixel_point_angleradius * 2)); 
-          }
+          //}
           /*
           PRECISION pixel_judge = pixel_point_angle * pixel_point_angle / (2 * pixel_point_angleradius); 
           if (pixel_judge < 1) {
@@ -254,6 +250,38 @@ PRECISION_4 *readData(char *data_file_name,
 } 
 
 
+// rotate a vector along the Z axis (the third basis) with angle θ  
+// a |x> + b |y> + c |z> ↦ a |x(θ)> + b |y> + c |z(θ)> 
+//                         = a (cos(θ) |x> - sin(θ) |z>) + 
+//                           b |y> + 
+//                           c (sin(θ) |x> + cos(θ) |z>)
+//                           ( cos(θ)     0     sin(θ) )  (a)
+//                         = (   0        1       0    )  (b)
+//                           ( -sin(θ)    0     cos(θ) )  (c)
+void rotateY3d_RENDERING(PRECISION_RENDERING rotate_angle, 
+                         PRECISION_RENDERING *vector) { 
+  PRECISION_RENDERING x = vector[0] * cosf(rotate_angle) + vector[2] * sinf(rotate_angle); 
+  PRECISION_RENDERING z = - vector[0] * sinf(rotate_angle) + vector[2] * cosf(rotate_angle); 
+  vector[0] = x; 
+  vector[2] = z; 
+}
+
+// rotate a vector along the Z axis (the third basis) with angle θ  
+// a |x> + b |y> + c |z> ↦ a |x(θ)> + b |y(θ)> + c |z> 
+//                         = a (cos(θ) |x> + sin(θ) |y>) + 
+//                           b (-sin(θ) |x> + cos(θ) |y>) + 
+//                           c |z>
+//                           ( cos(θ)   -sin(θ)   0 )  (a)
+//                         = ( sin(θ)   cos(θ)    0 )  (b)
+//                           (   0        0       1 )  (c)
+void rotateZ3d_RENDERING(PRECISION_RENDERING rotate_angle, 
+                         PRECISION_RENDERING *vector) { 
+  PRECISION_RENDERING x = vector[0] * cosf(rotate_angle) - vector[1] * sinf(rotate_angle); 
+  PRECISION_RENDERING y = vector[0] * sinf(rotate_angle) + vector[1] * cosf(rotate_angle); 
+  vector[0] = x; 
+  vector[1] = y; 
+}
+
 int main() {
 #ifdef DEBUG_ALL
   printf("[DEBUG] Debugging enabled!\n");
@@ -268,19 +296,19 @@ int main() {
 #endif
   
   char data_file_name[128]; 
-  char data_file_prefix[32] = "datas/131072"; 
+  char data_file_prefix[32] = "datas/65536"; 
 
   char image_file_name[128]; 
-  char image_file_prefix[32] = "images/131072"; 
+  char image_file_prefix[32] = "images/65536"; 
 
-  long image_size_width = 1920 * 2; 
-  long image_size_hight = 1080 * 2; 
+  long image_size_width = 1920; 
+  long image_size_hight = 1080; 
   long image_size_length = image_size_width * image_size_hight; 
 
   PRECISION_RENDERING image_camera_position[3] = {5e18f, 0, 0}; 
   PRECISION_RENDERING image_screen_position[3] = {4.9e18f, 0, 0}; 
-  PRECISION_RENDERING image_screen_basis_w[3] = {0, 0.2e18f / image_size_hight * 2, 0}; 
-  PRECISION_RENDERING image_screen_basis_h[3] = {0, 0, 0.2e18f / image_size_hight * 2}; 
+  PRECISION_RENDERING image_screen_basis_w[3] = {0, 0.4e18f / image_size_hight * 2, 0}; 
+  PRECISION_RENDERING image_screen_basis_h[3] = {0, 0, 0.4e18f / image_size_hight * 2}; 
 
   // CUDA configurations
   int3 cuda_block_size; 
@@ -302,6 +330,11 @@ int main() {
             cuda_grid_size.y, 
             cuda_grid_size.z); 
 
+  rotateY3d_RENDERING(- 3.1415926525 / 4, image_camera_position); 
+  rotateY3d_RENDERING(- 3.1415926525 / 4, image_screen_position); 
+  rotateY3d_RENDERING(- 3.1415926525 / 4, image_screen_basis_w); 
+  rotateY3d_RENDERING(- 3.1415926525 / 4, image_screen_basis_h);
+
   printf("camera_position\n\t%f\n\t%f\n\t%f\n", image_camera_position[0], image_camera_position[1], image_camera_position[2]); 
   printf("screen_position\n\t%f\n\t%f\n\t%f\n", image_screen_position[0], image_screen_position[1], image_screen_position[2]); 
   printf("screen_basis_w\n\t%f\n\t%f\n\t%f\n", image_screen_basis_w[0], image_screen_basis_w[1], image_screen_basis_w[2]); 
@@ -320,6 +353,7 @@ int main() {
   double begin_ms; 
   double end_ms; 
   double delta_ms; 
+
 
   while (data_point_number >= 0) { 
     image_index = image_index_base + image_index_offset; 
@@ -342,6 +376,7 @@ int main() {
     PRECISION_4 *data_point_position_next; 
     char *image = (char *)__aligned_alloc(32, sizeof(char) * image_size_length * 3); 
     char *image_previous; 
+
 
 #ifdef DEBUG_MEMORY
     if (image == NULL) {
@@ -386,7 +421,7 @@ int main() {
     }
     */
 
-    printf("[%d] Transformming data...\n", image_index); 
+    printf("[%d] Updating camera configuration...\n", image_index); 
 
     cudaMemcpy(cuda_image_camera_position, 
                image_camera_position, 
@@ -408,49 +443,51 @@ int main() {
                sizeof(PRECISION_RENDERING) * 3, 
                cudaMemcpyHostToDevice); 
 
-    /*
-    image = render(image_size_width, 
-                   image_size_hight, 
-                   image_camera_position, 
-                   image_screen_position, 
-                   image_screen_basis_w, 
-                   image_screen_basis_h, 
-                   data_point_number, 
-                   data_point_position);
-    */
 
     // Asynchronously read and write files. 
-    if (image_index_offset >= 0) {
-      printf("[%d] Rendering...\n", image_index);
+
+    printf("[%d] Rendering...\n", image_index);
       
-      render_CUDA<<<grid, block>>>(image_size_width, 
-                                   image_size_hight, 
-                                   image_size_length, 
-                                   cuda_image_camera_position, 
-                                   cuda_image_screen_position, 
-                                   cuda_image_screen_basis_w, 
-                                   cuda_image_screen_basis_h, 
-                                   data_point_number, 
-                                   cuda_data_point_position, 
-                                   cuda_image);
-     
-      // Read data for the next frame
-      sprintf(data_file_name, "%s,%d.nbody", data_file_prefix, image_index + 1); 
-      printf("[%d] Reading %s\n", image_index + 1, data_file_name); 
+    render_CUDA<<<grid, block>>>(image_size_width, 
+                                 image_size_hight, 
+                                 image_size_length, 
+                                 cuda_image_camera_position, 
+                                 cuda_image_screen_position, 
+                                 cuda_image_screen_basis_w, 
+                                 cuda_image_screen_basis_h, 
+                                 data_point_number, 
+                                 cuda_data_point_position, 
+                                 cuda_image);
+    
+    /*
+    // Rotate the camera
+    rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_camera_position); 
+    rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_screen_position); 
+    rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_screen_basis_w); 
+    rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_screen_basis_h); 
+    */
+    rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_camera_position); 
+    rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_screen_position); 
+    rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_screen_basis_w); 
+    rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_screen_basis_h);
 
-      data_point_position_next = readData(data_file_name, 
-                                          &data_point_number_next); 
+    // Read data for the next frame
+    sprintf(data_file_name, "%s,%d.nbody", data_file_prefix, image_index + 1); 
+    printf("[%d] Reading %s\n", image_index + 1, data_file_name); 
 
-      cudaMalloc((void**)&cuda_data_point_position_next, 
-                 sizeof(PRECISION_4) * data_point_number);
+    data_point_position_next = readData(data_file_name, 
+                                        &data_point_number_next); 
 
-      printf("[%d] Transformming data...\n", image_index + 1);
+    cudaMalloc((void**)&cuda_data_point_position_next, 
+               sizeof(PRECISION_4) * data_point_number);
 
-      cudaMemcpyAsync(cuda_data_point_position_next, 
-                      data_point_position_next, 
-                      sizeof(PRECISION_4) * data_point_number_next, 
-                      cudaMemcpyHostToDevice); 
-    }
+    printf("[%d] Transformming data...\n", image_index + 1);
+
+    cudaMemcpyAsync(cuda_data_point_position_next, 
+                    data_point_position_next, 
+                    sizeof(PRECISION_4) * data_point_number_next, 
+                    cudaMemcpyHostToDevice); 
+
 
     // Save the previous frame 
     if (image_index_offset > 0) {

@@ -9,7 +9,13 @@
 #endif
 
 #ifdef __linux__ 
-#include <sys/time.h>
+//#include <sys/time.h>
+  double __getMillisecond() {
+    struct timeval time; 
+    gettimeofday(&time, NULL); 
+    return (double)(time.tv_sec * 1000.0 + time.tv_usec / 1000.0); 
+  }
+
 #define getMillisecond __getMillisecond
 #else
 #define getMillisecond GetTickCount
@@ -25,7 +31,7 @@
 #define BLOCK_X 64
 #define GRID_Z 1
 #define GRID_Y 1
-#define GRID_X 131072 / BLOCK_X
+#define GRID_X 65536 / BLOCK_X
 #define TotalPoint BLOCK_X * BLOCK_Y * BLOCK_Z * GRID_X * GRID_Y * GRID_Z
 #define rool 50
 
@@ -41,16 +47,16 @@
 #define flopf (long double)(20*BLOCK_X + 15)*GRID_X*1e-9
 #define flopS (long double)flopf*rool*TotalPoint
 
-/*
+
 // Disk, uneven.
 void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) {
   PRECISION SUP_v = 1e7;
-  PRECISION INF_v = 1e2;
+  PRECISION INF_v = 1e4;
   PRECISION SUP_v_z = 1e2;
   PRECISION INF_v_z = -1e2;
   PRECISION SUP_z = 5 * LY;
   PRECISION INF_z = -5 * LY;
-  PRECISION SUP_radiu = 100 * LY;
+  PRECISION SUP_radiu = 1000 * LY;
   PRECISION INF_radiu = 1 * LY;
   PRECISION SUP_mass = 1e30;
   PRECISION INF_mass = 1e10;
@@ -58,7 +64,7 @@ void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) 
   srand(time(NULL));
   // Generate.
   // BlackHole, at the center of the disk.
-  Point[0].w = (float)(1e10 * SUP_mass * G * dt);
+  Point[0].w = (PRECISION)(1e10 * SUP_mass * G * dt);
   Point[0].x = 0;
   Point[0].y = 0;
   Point[0].z = 0;
@@ -70,7 +76,8 @@ void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) 
   for (unsigned long i = 1; i<TotalPoint; i++) {
     temp_theta = tau * rand()/(PRECISION)RAND_MAX;
     temp_radiu = (SUP_radiu - INF_radiu) * rand()/(PRECISION)RAND_MAX + INF_radiu;
-    temp_v = (SUP_v - INF_v) * rand()/(PRECISION)RAND_MAX + INF_v;
+    // Orbiting. 
+    temp_v = (SUP_v - INF_v) * rand()/(PRECISION)RAND_MAX + INF_v;//sqrt(Point[0].w / temp_radiu / dt); 
     // Generate mass*G*dt constant.
     Point[i].w = (PRECISION)(((SUP_mass - INF_mass) * rand()/(PRECISION)RAND_MAX + INF_mass) * G * dt);
     // Generate location.
@@ -78,15 +85,27 @@ void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) 
     Point[i].y = temp_radiu * sin(temp_theta);
     Point[i].z = (SUP_z - INF_z) * rand()/(PRECISION)RAND_MAX + INF_z;
     // Generate velocity.
-    Point_v[i].x = temp_v * (0 - sin(temp_radiu));
-    Point_v[i].y = temp_v * cos(temp_radiu);
+    Point_v[i].x = temp_v * (0 - sin(temp_theta));
+    Point_v[i].y = temp_v * cos(temp_theta);
     Point_v[i].z = 0;//(SUP_v_z - INF_v_z) * rand()/(PRECISION)RAND_MAX + INF_v_z;
   }
 
+  // Some massive stars. 
+  for (unsigned long i = 1; i < 10; i++) {
+    Point[i].w = (PRECISION)(1e7 * SUP_mass * G * dt);
+    /*
+    temp_radiu = sqrt(Point[i].x * Point[i].x + 
+                      Point[i].y * Point[i].y + 
+                      Point[i].z * Point[i].z); 
+    temp_v = sqrt(Point[0].w / temp_radiu / dt); 
+    Point_v[i].x = temp_v * (0 - sin(temp_radiu));
+    Point_v[i].y = temp_v * cos(temp_radiu);
+    */
+  }
 }
-*/
 
 
+/*
 // Cube, even.
 void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) {
   PRECISION Rx_u = 300 * LY;
@@ -123,13 +142,12 @@ void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) 
     Point[Tv].w = 1e10 * Rm_u * G * dt;
   }
 }
-
+*/
 
 
 void Save(PRECISION_4VECTOR *Point, int count) {
   char fileName[255];
   unsigned long long t[1] = {TotalPoint};
-  PRECISION temp[4];
   sprintf(fileName, "./datas/%ld,%d.nbody", TotalPoint, count);
   FILE *save;
   if ((save = fopen(fileName, "wb")) == NULL) {
@@ -137,59 +155,11 @@ void Save(PRECISION_4VECTOR *Point, int count) {
   }
   // Save the number of bodies.
   fwrite(t, 8, 1, save);
-  /*
-  for (unsigned long i=0; i < TotalPoint; i++) {
-    temp[0] = Point[i].w;
-    temp[1] = Point[i].x;
-    temp[2] = Point[i].y;
-    temp[3] = Point[i].z;
-    fwrite(temp, sizeof(PRECISION), 4, save);
-  }
-  */
-  fwrite(Point, sizeof(PRECISION), 4 * TotalPoint, save); 
+
+  fwrite(Point, sizeof(PRECISION_4VECTOR), TotalPoint, save); 
   fclose(save);
 }
 
-/*
-void Save(PRECISION_4VECTOR *Point, int count) {
-  FILE *save;
-  if ((save=fopen("data.data", "a+")) == NULL) {
-    printf("Can't save data.\n");
-  }
-
-  //Data = [[x1, x2, ...], [y1, y2, ...], [z1, z2, ...]]
-  fprintf(save, "[");
-  //Print P_xs;
-  fprintf(save, "[");
-  for (unsigned long i=0; i < TotalPoint; i++) {
-    fprintf(save, "%.2f", Point[i].x);
-    if (i != TotalPoint-1)
-      fprintf(save, ", ");
-  }
-  fprintf(save, "]");
-
-  //Print P_ys;
-  fprintf(save, ", [");
-  for (unsigned long i=0; i < TotalPoint; i++) {
-    fprintf(save, "%.2f", Point[i].y);
-    if (i != TotalPoint-1)
-      fprintf(save, ", ");
-  }
-  fprintf(save, "]");
-
-  //Print P_zs;
-  fprintf(save, ", [");
-  for (unsigned long i=0; i < TotalPoint; i++) {
-    fprintf(save, "%.2f", Point[i].z);
-    if (i != TotalPoint-1)
-      fprintf(save, ", ");
-  }
-  fprintf(save, "]");
-  fprintf(save, "]\n"); // The end.
-
-  fclose(save);
-}
-*/
 
 __global__ void CaculateTheNextTick(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v, PRECISION_4VECTOR *T) {
 
@@ -223,13 +193,10 @@ __global__ void CaculateTheNextTick(PRECISION_4VECTOR *Point, PRECISION_4VECTOR 
           dx = Temp[j].x - x_i;//1 flo
           dy = Temp[j].y - y_i;//1 flo
           dz = Temp[j].z - z_i;//1 flo
-          //dpos = Temp[j] - pos;
 
           rd = rsqrtf((dx * dx) + (dy * dy) + (dz * dz) + fix); // 8 flo
-          //rd = rsqrtf(dot(dpos) + fix);
 
           da_i = Temp[j].w * rd * rd * rd; //3 flo
-          //da_i = Temp[j].w
 
           da_ix += dx * da_i;//2 flo
           da_iy += dy * da_i;//2 flo
@@ -312,19 +279,14 @@ int main() {
     }
 
     endtime = getMillisecond();
-              //clock();
+
     deltatime = ( endtime - starttime ) / 1000;
     cudaMemcpy(Point, GPU_T, TotalPoint * sizeof(PRECISION_4VECTOR), cudaMemcpyDeviceToHost);
-    /*
-    printf("Done. %.2Lf fps, %.3Lf Sps, %.2Lf GPps, %.2Lf GFlops",
-            rool / (long double)deltatime,
-            1 / (long double)deltatime,
-            BodiesPerSave / (long double)deltatime,
-            flopS / (long double)deltatime);
-    */
+
     printf("\n\tGPPS = %Lf, \tGFlops=%Lf\n",
         BodiesPerSave / (long double)deltatime,
         flopS / (long double)deltatime);
+    
     fflush(stdout); 
     printf(" Saving... ");
     Save(Point, count);
