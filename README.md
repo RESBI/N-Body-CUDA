@@ -28,11 +28,11 @@ In `Nbody.cu`, on the top of the code, find `#define dt [time step]`, change the
 
 #### Smoothing Distance 
 
-In `Nbody.cu`, on the top of the code, find `#define fix [smooth distance]`, change the `[smooth distance]` to the number you want. Time unit is `meter`. 
+In `Nbody.cu`, on the top of the code, find `#define fix [smooth distance]`, change the `[smooth distance]` to the number you want. Length unit is `meter`. 
 
 #### Calculating Precision 
 
-In `Nbody.cu`, on the top of the code, find `#define PRECISION [precision]` and `#define PRECISION [precision4]`, change them into `float` and `float` for fp32, or `double` and `double4` for fp64. 
+In `Nbody.cu`, on the top of the code, find `#define PRECISION [precision]` and `#define PRECISION [precision4]`, change them into `float` and `float` for fp32, or `double` and `double4` for fp64. **FP16 wasn't tested**. 
 
 #### Steps Per Save 
 
@@ -67,6 +67,12 @@ In `rendering.cu`, in function `int main()`, find `char data_file_prefix[32] = "
 
 In `rendering.cu`, in function `int main()`, find `long image_size_width = [image width];` and `long image_size_hight = [image hight];`, change `[image width] x [image hight]` to the resolution you want. 
 
+#### Rendering Float Point Precision 
+
+It's the calculating precision of floating point number during rendering. 
+
+In `rendering.cu`, on the top of the code, find `#defind PRECISION_RENDERING [precision rendering]`, change the `[precision rendering]` to the fp type that fits you. **FP16 wasn't tested**. 
+
 #### Camera Configuration 
 
 In `rendering.cu`, in function `int main()`, we have 
@@ -90,6 +96,8 @@ In `rendering.cu`, in function `int main()`, find `int image_index_base = [start
 - ~~Rewrite the datasaving codes.~~ Finished 2024/12/01
 - ~~Rewrite the rendering code. (Maybe in C instead of Python.)~~ Finished 2024/12/01
 - ~~Change the rendering method. (Maybe something more mathematical, but not that mathematical.)~~ Finished 2024/12/01
+- Do a better rendering algorithm.
+- Rewrite the whole `Nbody.cu`. 
 - Support continuing calculation from a break point. 
 - Support computing on multiple devices. (Since I haven't multiple GPUs in one PC, this might take some times.(sad)) 
 - Support distributed computing. (Emmm.) 
