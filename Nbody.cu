@@ -26,12 +26,14 @@
 #define LY 9460730472580800 // Light-year
 #define G 6.67408e-11
 
+#define TILE_SIZE 128 
+
 #define BLOCK_Z 1
 #define BLOCK_Y 1
 #define BLOCK_X 64
 #define GRID_Z 1
 #define GRID_Y 1
-#define GRID_X 65536 / BLOCK_X
+#define GRID_X 524288 / BLOCK_X
 #define TotalPoint BLOCK_X * BLOCK_Y * BLOCK_Z * GRID_X * GRID_Y * GRID_Z
 #define rool 50
 
@@ -54,8 +56,8 @@ void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) 
   PRECISION INF_v = 1e4;
   PRECISION SUP_v_z = 1e2;
   PRECISION INF_v_z = -1e2;
-  PRECISION SUP_z = 5 * LY;
-  PRECISION INF_z = -5 * LY;
+  PRECISION SUP_z = 10 * LY;
+  PRECISION INF_z = -10 * LY;
   PRECISION SUP_radiu = 1000 * LY;
   PRECISION INF_radiu = 1 * LY;
   PRECISION SUP_mass = 1e30;
@@ -91,7 +93,7 @@ void GenerateRandomPoints(PRECISION_4VECTOR *Point, PRECISION_4VECTOR *Point_v) 
   }
 
   // Some massive stars. 
-  for (unsigned long i = 1; i < 10; i++) {
+  for (unsigned long i = 1; i < 100; i++) {
     Point[i].w = (PRECISION)(1e7 * SUP_mass * G * dt);
     /*
     temp_radiu = sqrt(Point[i].x * Point[i].x + 
@@ -181,14 +183,16 @@ __global__ void CaculateTheNextTick(PRECISION_4VECTOR *Point, PRECISION_4VECTOR 
     PRECISION da_iy = 0.0f;
     PRECISION da_iz = 0.0f;
 
-    __shared__ PRECISION_4VECTOR Temp[BLOCK_X];
-    for (int tile=0; tile < gridDim.x; tile++) {
-      __syncthreads();
-      Temp[threadIdx.x] = Point[tile * blockDim.x + threadIdx.x];
+    __shared__ PRECISION_4VECTOR Temp[TILE_SIZE];
+    for (int tile = 0; tile < TotalPoint / TILE_SIZE; tile++) {
+      __syncthreads(); 
+      for (int tile_sync_index = 0; tile_sync_index < TILE_SIZE / BLOCK_X; tile_sync_index++) {
+        Temp[BLOCK_X * tile_sync_index + threadIdx.x] = Point[BLOCK_X * tile_sync_index + tile * TILE_SIZE + threadIdx.x];
+      }
       __syncthreads();
 
       //#pragma unroll
-      for (int j=0; j<BLOCK_X; j++) {
+      for (int j = 0; j < TILE_SIZE; j++) {
         //if (i != j) {
           dx = Temp[j].x - x_i;//1 flo
           dy = Temp[j].y - y_i;//1 flo

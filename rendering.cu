@@ -49,8 +49,9 @@
 
 #define PRECISION double
 #define PRECISION_4 double4
-#define STAR_RADIUS (PRECISION)2e16
+#define STAR_RADIUS (PRECISION)5e15
 
+// Must be divisible by blockDim.x!!!
 #define TILE_SIZE 128
 
 // Todo: different precision when rendering
@@ -138,17 +139,16 @@ __global__ void render_CUDA(long image_size_width,
     pixel_normal[1] = pixel_normal[1] * pixel_normal_norm_reverse; 
     pixel_normal[2] = pixel_normal[2] * pixel_normal_norm_reverse; 
 
-    // I have no need to do tiling here, 
-    // since it has no bottleneck on memory accessing, 
-    // so I'm not gonna change it, temporarly. 
-    // Tile size must match block dim, at least for now. 
+    // Tile size must be divisible by block dim, at least for now. 
     __shared__ PRECISION_4 tile_point_position[TILE_SIZE]; 
     for (long tile_index = 0; tile_index < data_point_number / TILE_SIZE; tile_index++) { 
       __syncthreads(); 
-      tile_point_position[threadIdx.x].x = data_point_position[tile_index * TILE_SIZE + threadIdx.x].x; 
-      tile_point_position[threadIdx.x].y = data_point_position[tile_index * TILE_SIZE + threadIdx.x].y; 
-      tile_point_position[threadIdx.x].z = data_point_position[tile_index * TILE_SIZE + threadIdx.x].z; 
-      tile_point_position[threadIdx.x].w = data_point_position[tile_index * TILE_SIZE + threadIdx.x].w; 
+      for (int tile_sync_index = 0; tile_sync_index < TILE_SIZE / blockDim.x; tile_sync_index++) {
+        tile_point_position[tile_sync_index * blockDim.x + threadIdx.x].x = data_point_position[tile_index * TILE_SIZE + tile_sync_index * blockDim.x + threadIdx.x].x; 
+        tile_point_position[tile_sync_index * blockDim.x + threadIdx.x].y = data_point_position[tile_index * TILE_SIZE + tile_sync_index * blockDim.x + threadIdx.x].y; 
+        tile_point_position[tile_sync_index * blockDim.x + threadIdx.x].z = data_point_position[tile_index * TILE_SIZE + tile_sync_index * blockDim.x + threadIdx.x].z; 
+        tile_point_position[tile_sync_index * blockDim.x + threadIdx.x].w = data_point_position[tile_index * TILE_SIZE + tile_sync_index * blockDim.x + threadIdx.x].w; 
+      }
       __syncthreads(); 
 
       for (long point_index = 0; point_index < TILE_SIZE; point_index++) {
@@ -296,10 +296,10 @@ int main() {
 #endif
   
   char data_file_name[128]; 
-  char data_file_prefix[32] = "datas/65536"; 
+  char data_file_prefix[32] = "datas/524288"; 
 
   char image_file_name[128]; 
-  char image_file_prefix[32] = "images/65536"; 
+  char image_file_prefix[32] = "images/524288"; 
 
   long image_size_width = 1920; 
   long image_size_hight = 1080; 
@@ -314,7 +314,7 @@ int main() {
   int3 cuda_block_size; 
   int3 cuda_grid_size; 
 
-  cuda_block_size.x = TILE_SIZE; 
+  cuda_block_size.x = 64; 
   cuda_block_size.y = 1; 
   cuda_block_size.z = 1; 
 
@@ -461,15 +461,19 @@ int main() {
     
     /*
     // Rotate the camera
+    // Rotate around the Z axis
     rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_camera_position); 
     rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_screen_position); 
     rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_screen_basis_w); 
     rotateZ3d_RENDERING(3.1415926525 / 360 / 2, image_screen_basis_h); 
     */
+    /*
+    // Rotate around the Y axis
     rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_camera_position); 
     rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_screen_position); 
     rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_screen_basis_w); 
     rotateY3d_RENDERING(3.1415926525 / 360 / 4, image_screen_basis_h);
+    */
 
     // Read data for the next frame
     sprintf(data_file_name, "%s,%d.nbody", data_file_prefix, image_index + 1); 
