@@ -16,29 +16,29 @@ First create a folder `datas` in the same directory of `Nbody.cu`, then run `./N
 
 ### Do your own configuration 
 
-#### Particle Number
+#### - Particle Number
 
 In `Nbody.cu`, on the top of the code, find `#define GRID_X [particle number] / BLOCK_X`, change the `[particle number]` to the number you want. 
 
 **Notice that particle number must be divisible by block size `BLOCK_X`.** 
 
-#### Time Step
+#### - Time Step
 
 In `Nbody.cu`, on the top of the code, find `#define dt [time step]`, change the `[time step]` to the number you want. Time unit is `second`. 
 
-#### Smoothing Distance 
+#### - Smoothing Distance 
 
 In `Nbody.cu`, on the top of the code, find `#define fix [smooth distance]`, change the `[smooth distance]` to the number you want. Length unit is `meter`. 
 
-#### Calculating Precision 
+#### - Calculating Precision 
 
 In `Nbody.cu`, on the top of the code, find `#define PRECISION [precision]` and `#define PRECISION [precision4]`, change them into `float` and `float` for fp32, or `double` and `double4` for fp64. **FP16 wasn't tested**. 
 
-#### Steps Per Save 
+#### - Steps Per Save 
 
 In `Nbody.cu`, on the top of the code, find `#define rool [steps]`, change the `[steps]` to the number you want. I recommend `5` or `10` per save with _small_ (well, pretty big on the number itself) time step. 
 
-#### Initial Distribution 
+#### - Initial Distribution 
 
 In `Nbody.cu`, change the function `void GenerateRandomPoints()` into whatever you want. Coordinate in unit `meter`. 
 
@@ -57,23 +57,23 @@ First create a folder `images` in the same directory of `rendering.cu`, then run
 
 ### Do your own configuration 
 
-#### Particle Number
+#### - Particle Number
 
 It's **necessary** to match the particle number with your simulation. 
 
 In `rendering.cu`, in function `int main()`, find `char data_file_prefix[32] = "datas/[particle number]";` and `char image_file_prefix[32] = "images/[particle number]";`, change the `[particle number]` to the same as your simulation. If your forgot it, check `datas/[particle number],[step].nbody` for it. 
 
-#### Resolution 
+#### - Resolution 
 
 In `rendering.cu`, in function `int main()`, find `long image_size_width = [image width];` and `long image_size_hight = [image hight];`, change `[image width] x [image hight]` to the resolution you want. 
 
-#### Rendering Float Point Precision 
+#### - Rendering Float Point Precision 
 
 It's the calculating precision of floating point number during rendering. 
 
 In `rendering.cu`, on the top of the code, find `#defind PRECISION_RENDERING [precision rendering]`, change the `[precision rendering]` to the fp type that fits you. **FP16 wasn't tested**. 
 
-#### Camera Configuration 
+#### - Camera Configuration 
 
 In `rendering.cu`, in function `int main()`, we have 
 
@@ -87,7 +87,7 @@ In `rendering.cu`, in function `int main()`, we have
 
 those are camera configurations, documention on them is a Todo. 
 
-#### Which Frame To Begin With 
+#### - Which Frame To Begin With 
 
 In `rendering.cu`, in function `int main()`, find `int image_index_base = [start frame]`, change the `[start frame]` to the number of which frame you want to start with. 
  
