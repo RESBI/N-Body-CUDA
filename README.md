@@ -97,11 +97,11 @@ In `rendering.cu`, in function `int main()`, find `int image_index_base = [start
  
 
 ## Todos:
-- ~~Rewrite the datasaving codes.~~ Finished 2024/12/01
-- ~~Rewrite the rendering code. (Maybe in C instead of Python.)~~ Finished 2024/12/01
-- ~~Change the rendering method. (Maybe something more mathematical, but not that mathematical.)~~ Finished 2024/12/01
+- (2024/12/01) ~~Rewrite the datasaving codes.~~ 
+- (2024/12/01) ~~Rewrite the rendering code. (Maybe in C instead of Python.)~~ 
+- (2024/12/01) ~~Change the rendering method. (Maybe something more mathematical, but not that mathematical.)~~ 
 - Rechoose a unit system, then rewrite the whole `Nbody.cu`.
 - Do a better rendering algorithm.
 - Support continuing calculation from a break point. 
-- Support computing on multiple devices. (Since I haven't multiple GPUs in one PC, this might take some times.(sad)) 
-- Support distributed computing. (Emmm.) 
+- Support computing on multiple devices. (Waiting for nice cards with a nice price.) 
+- Support distributed computing. (Waiting for nice machine with a nice price.) 
