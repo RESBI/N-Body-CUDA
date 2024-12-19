@@ -458,7 +458,27 @@ int main() {
                                  data_point_number, 
                                  cuda_data_point_position, 
                                  cuda_image);
-    
+
+    // Save the previous frame 
+    if (image_index_offset > 0) {
+      sprintf(image_file_name, "%s-%d.bmp", image_file_prefix, image_index - 1); 
+      printf("[%d] Saving image to %s\n", image_index - 1, image_file_name);
+
+
+      /*
+      // IDK how to fix this Asyc memory copy. 
+      cudaMemcpyAsync(image_previous, 
+                      cuda_image_previous, 
+                      sizeof(char) * image_size_length * 3, 
+                      cudaMemcpyDeviceToHost); 
+      */
+      
+      writeBMP(image_previous, 
+               image_file_name, 
+               image_size_hight, 
+               image_size_width); 
+    }
+
     /*
     // Rotate the camera
     // Rotate around the Z axis
@@ -487,31 +507,11 @@ int main() {
 
     printf("[%d] Transformming data...\n", image_index + 1);
 
+    // IDK how to fix this Asyc memory copy. 
     cudaMemcpyAsync(cuda_data_point_position_next, 
                     data_point_position_next, 
                     sizeof(PRECISION_4) * data_point_number_next, 
                     cudaMemcpyHostToDevice); 
-
-
-    // Save the previous frame 
-    if (image_index_offset > 0) {
-      sprintf(image_file_name, "%s-%d.bmp", image_file_prefix, image_index - 1); 
-      printf("[%d] Saving image to %s\n", image_index - 1, image_file_name);
-
-
-      /*
-      // Why would this slower??
-      cudaMemcpyAsync(image_previous, 
-                      cuda_image_previous, 
-                      sizeof(char) * image_size_length * 3, 
-                      cudaMemcpyDeviceToHost); 
-      */
-      
-      writeBMP(image_previous, 
-               image_file_name, 
-               image_size_hight, 
-               image_size_width); 
-    }
 
     cudaThreadSynchronize();
     cudaDeviceSynchronize();
